@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:crewride_app/features/home/data/ride_api.dart';
 
 class WaypointSelectionScreen extends StatefulWidget {
@@ -15,8 +16,10 @@ class _WaypointSelectionScreenState extends State<WaypointSelectionScreen> {
   List<Map<String, dynamic>> _waypoints = [];
   int _nextOrderIndex = 0;
 
-  // MapTiler API key (same as MapScreen)
-  static const String _mapTilerApiKey = 'QAYEwZUJbmiypP9Ba7JX';
+  // MapTiler API key and URL loaded from .env file
+  late final String _mapTilerApiKey = dotenv.env['MAP_TILER_API_KEY'] ?? '';
+  late final String _mapTilerUrlTemplate =
+      dotenv.env['MAPTILER_URL_TEMPLATE'] ?? '';
 
   @override
   void initState() {
@@ -209,8 +212,9 @@ class _WaypointSelectionScreenState extends State<WaypointSelectionScreen> {
               ),
               children: [
                 TileLayer(
-                  urlTemplate:
-                      'https://api.maptiler.com/maps/streets-v2/{z}/{x}/{y}.png?key=$_mapTilerApiKey',
+                  urlTemplate: _mapTilerUrlTemplate
+                      .replaceAll('{style}', 'streets-v2')
+                      .replaceAll('{key}', _mapTilerApiKey),
                   userAgentPackageName: 'com.example.crewride_app',
                   maxZoom: 19,
                   tileProvider: NetworkTileProvider(),

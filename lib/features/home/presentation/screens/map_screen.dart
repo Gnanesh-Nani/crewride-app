@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:dio/dio.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import '../../data/ride_api.dart';
 import '../../data/location_service.dart';
 import '../../domain/models/ride.dart';
@@ -30,9 +31,10 @@ class _MapScreenState extends State<MapScreen>
   String? _error;
   bool _hasInitialized = false;
 
-  // Get your free API key from https://cloud.maptiler.com/
-  // Free tier: 100,000 map loads per month
-  static const String _mapTilerApiKey = 'QAYEwZUJbmiypP9Ba7JX';
+  late final String _mapTilerApiKey = dotenv.env['MAP_TILER_API_KEY'] ?? '';
+  late final String _mapTilerUrlTemplate =
+      dotenv.env['MAPTILER_URL_TEMPLATE'] ?? '';
+  late final String _osrmUrl = dotenv.env['OSRM_URL'] ?? '';
 
   // Keep this widget alive when switching tabs to avoid reloading map tiles
   @override
@@ -265,8 +267,7 @@ class _MapScreenState extends State<MapScreen>
     final coords = waypoints
         .map((w) => '${w.longitude},${w.latitude}')
         .join(';');
-    final url =
-        'http://router.project-osrm.org/route/v1/driving/$coords?overview=full&geometries=geojson';
+    final url = '${_osrmUrl}/$coords?overview=full&geometries=geojson';
     final dio = Dio();
     final res = await dio.get(url);
     if (res.statusCode == 200 && res.data != null) {
@@ -424,8 +425,9 @@ class _MapScreenState extends State<MapScreen>
         ),
         children: [
           TileLayer(
-            urlTemplate:
-                'https://api.maptiler.com/maps/$mapStyle/{z}/{x}/{y}.png?key=$_mapTilerApiKey',
+            urlTemplate: _mapTilerUrlTemplate
+                .replaceAll('{style}', mapStyle)
+                .replaceAll('{key}', _mapTilerApiKey),
             userAgentPackageName: 'com.example.crewride_app',
             maxZoom: 19,
             // Enable tile caching to reduce API calls
