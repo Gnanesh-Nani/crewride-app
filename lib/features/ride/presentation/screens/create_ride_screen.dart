@@ -2,8 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:crewride_app/core/network/dio_client.dart';
 import 'package:crewride_app/core/constants/endpoints/ride_endpoints.dart';
+import 'package:crewride_app/features/home/data/ride_api.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:dio/dio.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class CreateRideScreen extends StatefulWidget {
+  const CreateRideScreen({super.key});
+
   @override
   _CreateRideScreenState createState() => _CreateRideScreenState();
 }
@@ -17,11 +23,68 @@ class _CreateRideScreenState extends State<CreateRideScreen> {
   DateTime? _endTime;
   bool _isLoading = false;
 
+  late final String _osrmUrl = dotenv.env['OSRM_URL'] ?? '';
+
   @override
   void dispose() {
     _titleController.dispose();
     _descriptionController.dispose();
     super.dispose();
+  }
+
+  Future<Map<String, dynamic>?> _calculateRoute(
+    List<Map<String, dynamic>> waypoints,
+  ) async {
+    try {
+      if (waypoints.length < 2) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Need at least 2 waypoints')),
+        );
+        return null;
+      }
+
+      // Sort waypoints by orderIndex
+      final sortedWaypoints = List.of(waypoints);
+      sortedWaypoints.sort(
+        (a, b) => (a['orderIndex'] ?? 0).compareTo(b['orderIndex'] ?? 0),
+      );
+
+      // Create coordinates string for OSRM: longitude,latitude;longitude,latitude;...
+      final coords = sortedWaypoints
+          .map((w) => '${w['longitude']},${w['latitude']}')
+          .join(';');
+      final url = '$_osrmUrl/$coords?overview=full&geometries=geojson';
+
+      final dio = Dio();
+      final res = await dio.get(url);
+
+      if (res.statusCode == 200 && res.data != null) {
+        final data = res.data as Map<String, dynamic>;
+        final routes = data['routes'] as List<dynamic>?;
+        if (routes != null && routes.isNotEmpty) {
+          final geometry = routes[0]['geometry'] as Map<String, dynamic>?;
+          final distance = (routes[0]['distance'] as num?)?.toDouble() ?? 0.0;
+
+          if (geometry != null && geometry['coordinates'] is List) {
+            final coordsList = geometry['coordinates'] as List<dynamic>;
+
+            // Create GeoJSON LineString
+            final routePath = {
+              'type': 'LineString',
+              'coordinates': coordsList.map((c) {
+                return [(c[0] as num).toDouble(), (c[1] as num).toDouble()];
+              }).toList(),
+            };
+
+            return {'routePath': routePath, 'distanceMeters': distance};
+          }
+        }
+      }
+      return null;
+    } catch (e) {
+      print('Route calculation error: $e');
+      return null;
+    }
   }
 
   void _submitForm() async {
@@ -46,43 +109,134 @@ class _CreateRideScreenState extends State<CreateRideScreen> {
         'title': _titleController.text,
         'description': _descriptionController.text,
         'visibility': _visibility,
-        // Use UTC ISO strings to match backend expectations
         'startTime': _startTime!.toUtc().toIso8601String(),
         'endTime': _endTime!.toUtc().toIso8601String(),
       };
 
       try {
-        final response = await DioClient.instance.post(
-          RideEndpoints.createRide,
-          data: rideData,
-        );
+        if (mounted) {
+          // Navigate to waypoint selection and wait for waypoints
+          final waypoints =
+              await Navigator.pushNamed(
+                    context,
+                    '/waypointSelection',
+                    arguments: rideData,
+                  )
+                  as List<Map<String, dynamic>>?;
 
-        if (response.data['error'] == false) {
-          final createdRide = response.data['data']?['ride'];
-          final rideId = createdRide != null
-              ? createdRide['id']?.toString()
-              : null;
-
-          final waypointArgs = Map<String, dynamic>.from(rideData);
-          if (rideId != null) waypointArgs['id'] = rideId;
-
-          if (mounted) {
-            await Navigator.pushNamed(
-              context,
-              '/waypointSelection',
-              arguments: waypointArgs,
-            );
-            if (mounted) Navigator.pop(context, true);
-          }
-        } else {
-          if (mounted) {
+          if (waypoints != null && waypoints.isNotEmpty && mounted) {
+            // Calculate route
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  response.data['message'] ?? 'Failed to create ride.',
-                ),
+              const SnackBar(
+                content: Text('Calculating route...'),
+                duration: Duration(seconds: 2),
               ),
             );
+
+            final routeData = await _calculateRoute(waypoints);
+
+            if (mounted) {
+              if (routeData != null) {
+                try {
+                  // Prepare complete ride data with route
+                  final completeRideData = {
+                    ...rideData,
+                    'distanceMeters': (routeData['distanceMeters'] as double)
+                        .toInt(),
+                    'routePath': routeData['routePath'],
+                  };
+
+                  // Create ride with route data
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Creating ride...'),
+                      duration: Duration(seconds: 1),
+                    ),
+                  );
+
+                  final createResponse = await DioClient.instance.post(
+                    RideEndpoints.createRide,
+                    data: completeRideData,
+                  );
+
+                  if (mounted) {
+                    if (createResponse.data['error'] == false) {
+                      final createdRide = createResponse.data['data']?['ride'];
+                      final rideId = createdRide != null
+                          ? createdRide['id']?.toString()
+                          : null;
+
+                      if (rideId != null) {
+                        // Now save waypoints to the created ride
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Saving waypoints...'),
+                            duration: Duration(seconds: 1),
+                          ),
+                        );
+
+                        final api = RideApi();
+                        final waypointResponse = await api.addWaypoints(
+                          rideId,
+                          waypoints,
+                        );
+
+                        if (mounted) {
+                          if (waypointResponse.statusCode! >= 200 &&
+                              waypointResponse.statusCode! < 300) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'Ride created successfully with waypoints!',
+                                ),
+                                backgroundColor: Colors.green,
+                              ),
+                            );
+                            Navigator.pop(context, true);
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  waypointResponse.data?['message'] ??
+                                      'Failed to save waypoints',
+                                ),
+                              ),
+                            );
+                          }
+                        }
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Failed to create ride'),
+                          ),
+                        );
+                      }
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            createResponse.data['message'] ??
+                                'Failed to create ride',
+                          ),
+                        ),
+                      );
+                    }
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(
+                      context,
+                    ).showSnackBar(SnackBar(content: Text('Error: $e')));
+                  }
+                }
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Could not calculate route. Try again.'),
+                  ),
+                );
+              }
+            }
           }
         }
       } catch (e) {
@@ -142,9 +296,15 @@ class _CreateRideScreenState extends State<CreateRideScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Title section
-              const Text(
+              Text(
                 'Ride Details',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Theme.of(context).brightness == Brightness.dark
+                      ? Colors.white
+                      : Colors.black,
+                ),
               ),
               const SizedBox(height: 16),
 
@@ -159,7 +319,9 @@ class _CreateRideScreenState extends State<CreateRideScreen> {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   filled: true,
-                  fillColor: Colors.grey[50],
+                  fillColor: Theme.of(context).brightness == Brightness.dark
+                      ? Theme.of(context).colorScheme.surface
+                      : Colors.grey[50],
                 ),
                 validator: (value) {
                   if (value == null || value.isEmpty) {
@@ -182,7 +344,9 @@ class _CreateRideScreenState extends State<CreateRideScreen> {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   filled: true,
-                  fillColor: Colors.grey[50],
+                  fillColor: Theme.of(context).brightness == Brightness.dark
+                      ? Theme.of(context).colorScheme.surface
+                      : Colors.grey[50],
                 ),
                 validator: (value) {
                   if (value == null || value.isEmpty) {
@@ -194,20 +358,28 @@ class _CreateRideScreenState extends State<CreateRideScreen> {
               const SizedBox(height: 20),
 
               // Visibility section
-              const Text(
+              Text(
                 'Visibility',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Theme.of(context).brightness == Brightness.dark
+                      ? Colors.white
+                      : Colors.black,
+                ),
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
-                value: _visibility,
+                initialValue: _visibility,
                 decoration: InputDecoration(
                   prefixIcon: const Icon(Icons.visibility),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
                   filled: true,
-                  fillColor: Colors.grey[50],
+                  fillColor: Theme.of(context).brightness == Brightness.dark
+                      ? Theme.of(context).colorScheme.surface
+                      : Colors.grey[50],
                 ),
                 items: [
                   DropdownMenuItem(
@@ -238,9 +410,15 @@ class _CreateRideScreenState extends State<CreateRideScreen> {
               const SizedBox(height: 20),
 
               // Date & Time section
-              const Text(
+              Text(
                 'Schedule',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Theme.of(context).brightness == Brightness.dark
+                      ? Colors.white
+                      : Colors.black,
+                ),
               ),
               const SizedBox(height: 12),
 
@@ -248,8 +426,14 @@ class _CreateRideScreenState extends State<CreateRideScreen> {
               Container(
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.grey[300]!),
-                  color: Colors.grey[50],
+                  border: Border.all(
+                    color: Theme.of(context).brightness == Brightness.dark
+                        ? Colors.grey.shade700
+                        : Colors.grey[300]!,
+                  ),
+                  color: Theme.of(context).brightness == Brightness.dark
+                      ? Theme.of(context).colorScheme.surface
+                      : Colors.grey[50],
                 ),
                 child: ListTile(
                   leading: const Icon(Icons.schedule, color: Colors.green),
@@ -263,7 +447,13 @@ class _CreateRideScreenState extends State<CreateRideScreen> {
                     style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
-                      color: _startTime == null ? Colors.grey : Colors.black87,
+                      color: _startTime == null
+                          ? (Theme.of(context).brightness == Brightness.dark
+                                ? Colors.grey[500]
+                                : Colors.grey)
+                          : (Theme.of(context).brightness == Brightness.dark
+                                ? Colors.white
+                                : Colors.black87),
                     ),
                   ),
                   trailing: const Icon(Icons.calendar_today),
@@ -276,8 +466,14 @@ class _CreateRideScreenState extends State<CreateRideScreen> {
               Container(
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.grey[300]!),
-                  color: Colors.grey[50],
+                  border: Border.all(
+                    color: Theme.of(context).brightness == Brightness.dark
+                        ? Colors.grey.shade700
+                        : Colors.grey[300]!,
+                  ),
+                  color: Theme.of(context).brightness == Brightness.dark
+                      ? Theme.of(context).colorScheme.surface
+                      : Colors.grey[50],
                 ),
                 child: ListTile(
                   leading: const Icon(Icons.schedule, color: Colors.red),
@@ -289,7 +485,13 @@ class _CreateRideScreenState extends State<CreateRideScreen> {
                     style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
-                      color: _endTime == null ? Colors.grey : Colors.black87,
+                      color: _endTime == null
+                          ? (Theme.of(context).brightness == Brightness.dark
+                                ? Colors.grey[500]
+                                : Colors.grey)
+                          : (Theme.of(context).brightness == Brightness.dark
+                                ? Colors.white
+                                : Colors.black87),
                     ),
                   ),
                   trailing: const Icon(Icons.calendar_today),
@@ -314,7 +516,7 @@ class _CreateRideScreenState extends State<CreateRideScreen> {
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    backgroundColor: Colors.blue,
+                    backgroundColor: Theme.of(context).colorScheme.primary,
                     disabledBackgroundColor: Colors.grey[400],
                   ),
                 ),
