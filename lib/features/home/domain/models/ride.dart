@@ -33,11 +33,14 @@ class Ride {
   final String creatorId;
   final String visibility;
   final String rideStatus;
+  final String? rideMemberStatus;
   final DateTime startTime;
   final DateTime endTime;
   final DateTime createdAt;
   final String? crewId;
   final List<Waypoint> waypoints;
+  final Map<String, dynamic>? routePath;
+  final int? distanceMeters;
 
   Ride({
     required this.id,
@@ -50,7 +53,10 @@ class Ride {
     required this.endTime,
     required this.createdAt,
     this.crewId,
+    this.rideMemberStatus,
     this.waypoints = const [],
+    this.routePath,
+    this.distanceMeters,
   });
 
   factory Ride.fromJson(Map<String, dynamic> json) {
@@ -66,11 +72,14 @@ class Ride {
       creatorId: json['creatorId']?.toString() ?? '',
       visibility: json['visibility'] ?? 'public',
       rideStatus: json['rideStatus'] ?? '',
+      rideMemberStatus: json['rideMemberStatus'] as String?,
       startTime: DateTime.parse(json['startTime']).toLocal(),
       endTime: DateTime.parse(json['endTime']).toLocal(),
       createdAt: DateTime.parse(json['createdAt']).toLocal(),
       crewId: json['crewId']?.toString(),
       waypoints: waypoints,
+      routePath: json['routePath'] as Map<String, dynamic>?,
+      distanceMeters: json['distanceMeters'] as int?,
     );
   }
 }

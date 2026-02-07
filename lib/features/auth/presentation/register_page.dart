@@ -172,7 +172,10 @@ class _RegisterPageState extends State<RegisterPage> {
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             fontSize: 18,
-                            color: Colors.grey.shade800,
+                            color:
+                                Theme.of(context).brightness == Brightness.dark
+                                ? Colors.white
+                                : Colors.grey.shade800,
                             fontWeight: FontWeight.w600,
                           ),
                         ),

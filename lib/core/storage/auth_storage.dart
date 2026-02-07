@@ -18,6 +18,12 @@ class AuthStorage {
     return jsonDecode(jsonString) as Map<String, dynamic>;
   }
 
+  /// Get current user ID
+  static Future<String?> getCurrentUserId() async {
+    final userData = await getUserData();
+    return userData?['id'] as String?;
+  }
+
   /// Check if user is logged in
   static Future<bool> isLoggedIn() async {
     final userData = await getUserData();

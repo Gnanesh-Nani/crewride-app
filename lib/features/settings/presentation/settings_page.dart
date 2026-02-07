@@ -3,6 +3,7 @@ import 'package:crewride_app/core/network/dio_client.dart';
 import 'package:crewride_app/features/auth/presentation/login_page.dart';
 import 'package:crewride_app/core/storage/auth_storage.dart';
 import 'package:crewride_app/core/theme/theme_controller.dart';
+import 'package:crewride_app/core/theme/app_themes.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key, this.onLogout, this.onLoginSuccess});
@@ -15,12 +16,12 @@ class SettingsPage extends StatefulWidget {
 }
 
 class _SettingsPageState extends State<SettingsPage> {
-  late bool _isDark;
+  late AppTheme _selectedTheme;
 
   @override
   void initState() {
     super.initState();
-    _isDark = themeController.mode == ThemeMode.dark;
+    _selectedTheme = themeController.currentTheme;
     themeController.addListener(_syncTheme);
   }
 
@@ -32,7 +33,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
   void _syncTheme() {
     setState(() {
-      _isDark = themeController.mode == ThemeMode.dark;
+      _selectedTheme = themeController.currentTheme;
     });
   }
 
@@ -93,17 +94,44 @@ class _SettingsPageState extends State<SettingsPage> {
       body: ListView(
         padding: const EdgeInsets.symmetric(vertical: 8),
         children: [
-          SwitchListTile.adaptive(
-            value: _isDark,
-            onChanged: (val) {
-              setState(() => _isDark = val);
-              themeController.setMode(val ? ThemeMode.dark : ThemeMode.light);
-            },
-            secondary: const Icon(Icons.dark_mode_outlined),
-            title: const Text('Dark mode'),
-            subtitle: const Text('Switch between light and dark themes'),
+          // Theme Selection Section
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Theme',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: Theme.of(context).brightness == Brightness.dark
+                        ? Colors.grey.shade400
+                        : Colors.grey,
+                  ),
+                ),
+                DropdownButton<AppTheme>(
+                  value: _selectedTheme,
+                  items: AppTheme.values.map((theme) {
+                    return DropdownMenuItem<AppTheme>(
+                      value: theme,
+                      child: Text(theme.label),
+                    );
+                  }).toList(),
+                  onChanged: (theme) async {
+                    if (theme != null) {
+                      await themeController.setTheme(theme);
+                    }
+                  },
+                  underline: Container(),
+                  isDense: true,
+                ),
+              ],
+            ),
           ),
           const Divider(height: 1),
+          const SizedBox(height: 16),
+          // Logout
           ListTile(
             leading: const Icon(Icons.logout, color: Colors.redAccent),
             title: const Text('Logout'),
