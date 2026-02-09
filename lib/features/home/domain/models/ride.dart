@@ -14,14 +14,49 @@ class Waypoint {
   });
 
   factory Waypoint.fromJson(Map<String, dynamic> json) {
+    // Handle new format with location.coordinates
+    double latitude = 0;
+    double longitude = 0;
+
+    if (json['location'] is Map<String, dynamic>) {
+      final location = json['location'] as Map<String, dynamic>;
+      if (location['coordinates'] is List) {
+        final coords = location['coordinates'] as List<dynamic>;
+        if (coords.length >= 2) {
+          longitude = (coords[0] as num).toDouble();
+          latitude = (coords[1] as num).toDouble();
+        }
+      }
+    } else {
+      // Fallback to old format
+      latitude = (json['latitude'] as num?)?.toDouble() ?? 0;
+      longitude = (json['longitude'] as num?)?.toDouble() ?? 0;
+    }
+
     return Waypoint(
       id: json['id']?.toString() ?? '',
-      latitude: (json['latitude'] as num).toDouble(),
-      longitude: (json['longitude'] as num).toDouble(),
+      latitude: latitude,
+      longitude: longitude,
       type: json['type'] as String?,
       orderIndex: json['orderIndex'] != null
           ? (json['orderIndex'] as num).toInt()
           : null,
+    );
+  }
+}
+
+class RideMember {
+  final String username;
+  final String fullname;
+  final String? avatarurl;
+
+  RideMember({required this.username, required this.fullname, this.avatarurl});
+
+  factory RideMember.fromJson(Map<String, dynamic> json) {
+    return RideMember(
+      username: json['username'] ?? '',
+      fullname: json['fullname'] ?? '',
+      avatarurl: json['avatarurl'] as String?,
     );
   }
 }
@@ -39,8 +74,12 @@ class Ride {
   final DateTime createdAt;
   final String? crewId;
   final List<Waypoint> waypoints;
+  final List<RideMember> rideMembers;
   final Map<String, dynamic>? routePath;
   final int? distanceMeters;
+  final bool isCreatedByYou;
+  final bool isJoinedByYou;
+  final String? leaderName;
 
   Ride({
     required this.id,
@@ -55,14 +94,23 @@ class Ride {
     this.crewId,
     this.rideMemberStatus,
     this.waypoints = const [],
+    this.rideMembers = const [],
     this.routePath,
     this.distanceMeters,
+    this.isCreatedByYou = false,
+    this.isJoinedByYou = false,
+    this.leaderName,
   });
 
   factory Ride.fromJson(Map<String, dynamic> json) {
     final waypointsJson = (json['waypoints'] as List<dynamic>?) ?? [];
     final waypoints = waypointsJson
         .map((e) => Waypoint.fromJson(e as Map<String, dynamic>))
+        .toList();
+
+    final rideMembersJson = (json['rideMembers'] as List<dynamic>?) ?? [];
+    final rideMembers = rideMembersJson
+        .map((e) => RideMember.fromJson(e as Map<String, dynamic>))
         .toList();
 
     return Ride(
@@ -78,8 +126,12 @@ class Ride {
       createdAt: DateTime.parse(json['createdAt']).toLocal(),
       crewId: json['crewId']?.toString(),
       waypoints: waypoints,
+      rideMembers: rideMembers,
       routePath: json['routePath'] as Map<String, dynamic>?,
       distanceMeters: json['distanceMeters'] as int?,
+      isCreatedByYou: json['isCreatedByYou'] as bool? ?? false,
+      isJoinedByYou: json['isJoinedByYou'] as bool? ?? false,
+      leaderName: json['leaderName'] as String?,
     );
   }
 }
