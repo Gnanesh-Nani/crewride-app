@@ -47,15 +47,15 @@ class ActiveRidesSectionWidget extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: Colors.green[100],
+                  color: Colors.green,
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
                   '${activeRides.length} Live',
-                  style: TextStyle(
+                  style: const TextStyle(
                     fontSize: 10,
                     fontWeight: FontWeight.bold,
-                    color: Colors.green[700],
+                    color: Colors.white,
                   ),
                 ),
               ),

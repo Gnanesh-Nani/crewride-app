@@ -412,7 +412,10 @@ class _RideDetailScreenState extends State<RideDetailScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     // Map Section
-                    RideMapWidget(waypoints: ride.waypoints),
+                    RideMapWidget(
+                      waypoints: ride.waypoints,
+                      routePath: ride.routePath,
+                    ),
 
                     // Header and Stats Section
                     RideHeaderInfoWidget(ride: ride, distance: distance),

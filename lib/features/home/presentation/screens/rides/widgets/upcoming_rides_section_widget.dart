@@ -37,7 +37,7 @@ class UpcomingRidesSectionWidget extends StatelessWidget {
     final duration = startTime.difference(now);
 
     if (duration.isNegative) {
-      return 'Ride has started';
+      return 'Waiting for leader to start';
     }
 
     final days = duration.inDays;

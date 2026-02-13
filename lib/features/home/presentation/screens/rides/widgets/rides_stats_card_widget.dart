@@ -19,7 +19,7 @@ class RidesStatsCardWidget extends StatelessWidget {
         gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFF2563eb), Color(0xFF3b82f6)],
+          colors: [Color.fromARGB(255, 37, 169, 235), Color(0xFF3b82f6)],
         ),
         borderRadius: BorderRadius.circular(28),
         boxShadow: [

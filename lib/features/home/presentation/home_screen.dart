@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:crewride_app/core/theme/theme_controller.dart';
 import 'widgets/crew_bottom_nav.dart';
-import 'screens/map_screen.dart';
+import 'screens/map/map_screen.dart';
 import 'screens/crews_screen.dart';
 import 'screens/profile_screen.dart';
 

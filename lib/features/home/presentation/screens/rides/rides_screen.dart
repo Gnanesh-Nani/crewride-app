@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:crewride_app/features/home/data/ride_api.dart';
 import 'package:crewride_app/features/home/domain/models/ride.dart';
 import 'package:crewride_app/core/storage/auth_storage.dart';
+import 'package:crewride_app/features/ride/presentation/screens/create_ride_screen.dart';
 import '../ride_detail/ride_detail_screen.dart';
 import 'widgets/rides_header_widget.dart';
 import 'widgets/rides_stats_card_widget.dart';
@@ -163,294 +164,335 @@ class _RidesScreenState extends State<RidesScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return RefreshIndicator(
-      onRefresh: () async {
-        setState(() {
-          _ridesFuture = _loadRides();
-        });
-        await _ridesFuture;
-      },
-      child: FutureBuilder<Map<String, dynamic>>(
-        future: _ridesFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
+    return Scaffold(
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const CreateRideScreen()),
+          );
+        },
+        backgroundColor: Colors.blue,
+        child: const Icon(Icons.add),
+      ),
+      body: RefreshIndicator(
+        onRefresh: () async {
+          setState(() {
+            _ridesFuture = _loadRides();
+          });
+          await _ridesFuture;
+        },
+        child: FutureBuilder<Map<String, dynamic>>(
+          future: _ridesFuture,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
 
-          if (snapshot.hasError) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.error_outline,
-                    size: 56,
-                    color: Colors.red.shade300,
-                  ),
-                  const SizedBox(height: 12),
-                  const Text('Failed to load rides'),
-                  const SizedBox(height: 16),
-                  ElevatedButton.icon(
-                    onPressed: () {
-                      setState(() {
-                        _ridesFuture = _loadRides();
-                      });
-                    },
-                    icon: const Icon(Icons.refresh),
-                    label: const Text('Retry'),
-                  ),
-                ],
-              ),
-            );
-          }
-
-          final data = snapshot.data ?? {};
-          final rides = (data['rides'] as List<Ride>?) ?? [];
-          final summary = (data['summary'] as Map<String, dynamic>?) ?? {};
-
-          final totalDistance =
-              ((summary['totalRidedDistance'] as num?)?.toDouble() ?? 0) / 1000;
-          final ridesCount =
-              (summary['completedRidesCount'] as num?)?.toInt() ?? 0;
-          final avgDistance =
-              ((summary['averageDistance'] as num?)?.toDouble() ?? 0) / 1000;
-
-          final groupedRides = _groupRidesByStatus(rides);
-          final activeRides = groupedRides['active'] ?? [];
-          final upcomingRides = groupedRides['upcoming'] ?? [];
-          final endedRides = groupedRides['ended'] ?? [];
-          final cancelledRides = groupedRides['cancelled'] ?? [];
-
-          return ListView(
-            padding: const EdgeInsets.all(0),
-            children: [
-              // Header
-              RidesHeaderWidget(
-                onSearchTap: () {
-                  setState(() {
-                    _isSearchExpanded = !_isSearchExpanded;
-                    if (!_isSearchExpanded) {
-                      _searchController.clear();
-                      _searchResults = [];
-                      _hasSearched = false;
-                    }
-                  });
-                },
-              ),
-              const SizedBox(height: 16),
-
-              // Search Bar
-              if (_isSearchExpanded)
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: TextField(
-                    controller: _searchController,
-                    decoration: InputDecoration(
-                      hintText: 'Search rides...',
-                      prefixIcon: const Icon(Icons.search),
-                      suffixIcon: _searchController.text.isNotEmpty
-                          ? IconButton(
-                              icon: const Icon(Icons.clear),
-                              onPressed: () {
-                                _searchController.clear();
-                                setState(() {
-                                  _searchResults = [];
-                                  _hasSearched = false;
-                                });
-                              },
-                            )
-                          : null,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
-                      ),
+            if (snapshot.hasError) {
+              return Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.error_outline,
+                      size: 56,
+                      color: Colors.red.shade300,
                     ),
-                    onChanged: (value) {
-                      setState(() {});
-                      _searchRides(value);
-                    },
-                  ),
+                    const SizedBox(height: 12),
+                    const Text('Failed to load rides'),
+                    const SizedBox(height: 16),
+                    ElevatedButton.icon(
+                      onPressed: () {
+                        setState(() {
+                          _ridesFuture = _loadRides();
+                        });
+                      },
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('Retry'),
+                    ),
+                  ],
                 ),
-              if (_isSearchExpanded) const SizedBox(height: 16),
+              );
+            }
 
-              // Search Results or Regular Content
-              if (_hasSearched)
-                if (_isSearching)
-                  const Padding(
-                    padding: EdgeInsets.all(16),
-                    child: CircularProgressIndicator(),
-                  )
-                else if (_searchResults.isEmpty)
-                  Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.search_off,
-                          size: 48,
-                          color: Colors.grey[400],
-                        ),
-                        const SizedBox(height: 12),
-                        const Text('No rides found'),
-                      ],
-                    ),
-                  )
-                else
+            final data = snapshot.data ?? {};
+            final rides = (data['rides'] as List<Ride>?) ?? [];
+            final summary = (data['summary'] as Map<String, dynamic>?) ?? {};
+
+            final totalDistance =
+                ((summary['totalRidedDistance'] as num?)?.toDouble() ?? 0) /
+                1000;
+            final ridesCount =
+                (summary['completedRidesCount'] as num?)?.toInt() ?? 0;
+            final avgDistance =
+                ((summary['averageDistance'] as num?)?.toDouble() ?? 0) / 1000;
+
+            final groupedRides = _groupRidesByStatus(rides);
+            final activeRides = groupedRides['active'] ?? [];
+            final upcomingRides = groupedRides['upcoming'] ?? [];
+            final endedRides = groupedRides['ended'] ?? [];
+            final cancelledRides = groupedRides['cancelled'] ?? [];
+
+            return ListView(
+              padding: const EdgeInsets.all(0),
+              children: [
+                // Header
+                RidesHeaderWidget(
+                  onSearchTap: () {
+                    setState(() {
+                      _isSearchExpanded = !_isSearchExpanded;
+                      if (!_isSearchExpanded) {
+                        _searchController.clear();
+                        _searchResults = [];
+                        _hasSearched = false;
+                      }
+                    });
+                  },
+                ),
+                const SizedBox(height: 16),
+
+                // Search Bar
+                if (_isSearchExpanded)
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Column(
-                      children: _searchResults
-                          .map(
-                            (ride) => Padding(
-                              padding: const EdgeInsets.only(bottom: 12),
-                              child: GestureDetector(
-                                onTap: () {
-                                  Navigator.of(context).push(
-                                    MaterialPageRoute(
-                                      builder: (context) =>
-                                          RideDetailScreen(rideId: ride.id),
-                                    ),
-                                  );
+                    child: TextField(
+                      controller: _searchController,
+                      decoration: InputDecoration(
+                        hintText: 'Search rides...',
+                        prefixIcon: const Icon(Icons.search),
+                        suffixIcon: _searchController.text.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(Icons.clear),
+                                onPressed: () {
+                                  _searchController.clear();
+                                  setState(() {
+                                    _searchResults = [];
+                                    _hasSearched = false;
+                                  });
                                 },
-                                child: Container(
-                                  padding: const EdgeInsets.all(14),
-                                  decoration: BoxDecoration(
-                                    color:
-                                        Theme.of(context).brightness ==
-                                            Brightness.dark
-                                        ? Theme.of(context).colorScheme.surface
-                                        : Colors.white,
-                                    borderRadius: BorderRadius.circular(12),
-                                    border: Border.all(
+                              )
+                            : null,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
+                      ),
+                      onChanged: (value) {
+                        setState(() {});
+                        _searchRides(value);
+                      },
+                    ),
+                  ),
+                if (_isSearchExpanded) const SizedBox(height: 16),
+
+                // Search Results or Regular Content
+                if (_hasSearched)
+                  if (_isSearching)
+                    const Padding(
+                      padding: EdgeInsets.all(16),
+                      child: CircularProgressIndicator(),
+                    )
+                  else if (_searchResults.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.search_off,
+                            size: 48,
+                            color: Colors.grey[400],
+                          ),
+                          const SizedBox(height: 12),
+                          const Text('No rides found'),
+                        ],
+                      ),
+                    )
+                  else
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Column(
+                        children: _searchResults
+                            .map(
+                              (ride) => Padding(
+                                padding: const EdgeInsets.only(bottom: 12),
+                                child: GestureDetector(
+                                  onTap: () {
+                                    Navigator.of(context).push(
+                                      MaterialPageRoute(
+                                        builder: (context) =>
+                                            RideDetailScreen(rideId: ride.id),
+                                      ),
+                                    );
+                                  },
+                                  child: Container(
+                                    padding: const EdgeInsets.all(14),
+                                    decoration: BoxDecoration(
                                       color:
                                           Theme.of(context).brightness ==
                                               Brightness.dark
-                                          ? Colors.grey.shade700
-                                          : Colors.grey[300]!,
-                                      width: 1,
-                                    ),
-                                  ),
-                                  child: Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceBetween,
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.center,
-                                    children: [
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              ride.title,
-                                              style: const TextStyle(
-                                                fontSize: 16,
-                                                fontWeight: FontWeight.bold,
-                                              ),
-                                            ),
-                                            const SizedBox(height: 4),
-                                            Text(
-                                              ride.description,
-                                              style: TextStyle(
-                                                fontSize: 12,
-                                                color: Colors.grey[600],
-                                              ),
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Icon(
-                                        Icons.chevron_right,
+                                          ? Theme.of(
+                                              context,
+                                            ).colorScheme.surface
+                                          : Colors.white,
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(
                                         color:
                                             Theme.of(context).brightness ==
                                                 Brightness.dark
-                                            ? Colors.grey[600]
-                                            : Colors.grey[400],
+                                            ? Colors.grey.shade700
+                                            : Colors.grey[300]!,
+                                        width: 1,
                                       ),
-                                    ],
+                                    ),
+                                    child: Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceBetween,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.center,
+                                      children: [
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                ride.title,
+                                                style: const TextStyle(
+                                                  fontSize: 16,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 4),
+                                              Text(
+                                                ride.description,
+                                                style: TextStyle(
+                                                  fontSize: 12,
+                                                  color: Colors.grey[600],
+                                                ),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Icon(
+                                          Icons.chevron_right,
+                                          color:
+                                              Theme.of(context).brightness ==
+                                                  Brightness.dark
+                                              ? Colors.grey[600]
+                                              : Colors.grey[400],
+                                        ),
+                                      ],
+                                    ),
                                   ),
                                 ),
                               ),
-                            ),
-                          )
-                          .toList(),
-                    ),
-                  )
-              else ...[
-                // Gradient Stats Card
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: RidesStatsCardWidget(
-                    totalDistance: totalDistance,
-                    ridesCount: ridesCount,
-                    avgDistance: avgDistance,
-                  ),
-                ),
-                const SizedBox(height: 28),
-
-                // Active Rides
-                if (activeRides.isNotEmpty) ...[
-                  ActiveRidesSectionWidget(
-                    activeRides: activeRides,
-                    currentUserId: _currentUserId,
-                  ),
-                  const SizedBox(height: 28),
-                ],
-
-                // Upcoming Rides
-                if (upcomingRides.isNotEmpty) ...[
-                  UpcomingRidesSectionWidget(
-                    upcomingRides: upcomingRides,
-                    currentUserId: _currentUserId,
-                  ),
-                  const SizedBox(height: 28),
-                ],
-
-                // Ended Rides
-                if (endedRides.isNotEmpty) ...[
+                            )
+                            .toList(),
+                      ),
+                    )
+                else ...[
+                  // Gradient Stats Card
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: EndedRidesSectionWidget(endedRides: endedRides),
-                  ),
-                  const SizedBox(height: 28),
-                ],
-
-                // Cancelled Rides
-                if (cancelledRides.isNotEmpty) ...[
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: CancelledRidesSectionWidget(
-                      cancelledRides: cancelledRides,
+                    child: RidesStatsCardWidget(
+                      totalDistance: totalDistance,
+                      ridesCount: ridesCount,
+                      avgDistance: avgDistance,
                     ),
                   ),
                   const SizedBox(height: 28),
-                ],
 
-                if (activeRides.isEmpty &&
-                    upcomingRides.isEmpty &&
-                    endedRides.isEmpty &&
-                    cancelledRides.isEmpty)
-                  Padding(
-                    padding: const EdgeInsets.all(32),
-                    child: Center(
-                      child: Text(
-                        'No rides yet. Start exploring!',
-                        style: TextStyle(fontSize: 16, color: Colors.grey[400]),
+                  // Active Rides
+                  if (activeRides.isNotEmpty) ...[
+                    ActiveRidesSectionWidget(
+                      activeRides: activeRides,
+                      currentUserId: _currentUserId,
+                    ),
+                    const SizedBox(height: 28),
+                  ],
+
+                  // Upcoming Rides
+                  if (upcomingRides.isNotEmpty) ...[
+                    UpcomingRidesSectionWidget(
+                      upcomingRides: upcomingRides,
+                      currentUserId: _currentUserId,
+                    ),
+                    const SizedBox(height: 28),
+                  ],
+
+                  // Ended Rides
+                  if (endedRides.isNotEmpty) ...[
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: EndedRidesSectionWidget(endedRides: endedRides),
+                    ),
+                    const SizedBox(height: 28),
+                  ],
+
+                  // Cancelled Rides
+                  if (cancelledRides.isNotEmpty) ...[
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: CancelledRidesSectionWidget(
+                        cancelledRides: cancelledRides,
                       ),
                     ),
-                  ),
+                    const SizedBox(height: 28),
+                  ],
+
+                  if (activeRides.isEmpty &&
+                      upcomingRides.isEmpty &&
+                      endedRides.isEmpty &&
+                      cancelledRides.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.all(32),
+                      child: Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const SizedBox(height: 100),
+                            Icon(
+                              Icons.directions_bike,
+                              size: 64,
+                              color: Colors.grey[400],
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              'No rides yet',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.grey[600],
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Please create some rides to get started!',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.grey[500],
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 24),
+                          ],
+                        ),
+                      ),
+                    ),
+                ],
+                const SizedBox(height: 20),
               ],
-              const SizedBox(height: 20),
-            ],
-          );
-        },
+            );
+          },
+        ),
       ),
     );
   }

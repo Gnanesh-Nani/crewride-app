@@ -5,40 +5,97 @@ import 'package:latlong2/latlong.dart';
 
 class RideMapWidget extends StatelessWidget {
   final List<Waypoint> waypoints;
+  final double initialZoom;
+  final Map<String, dynamic>? routePath;
 
-  const RideMapWidget({super.key, required this.waypoints});
+  const RideMapWidget({
+    super.key,
+    required this.waypoints,
+    this.initialZoom = 17,
+    this.routePath,
+  });
+
+  Widget _buildPinMarker(String? waypointType, int waypointNumber) {
+    Color pinColor;
+
+    if (waypointType == 'start') {
+      pinColor = Colors.green;
+    } else if (waypointType == 'destination') {
+      pinColor = Colors.red;
+    } else {
+      pinColor = Colors.yellow[700] ?? Colors.yellow;
+    }
+
+    return Icon(
+      Icons.location_on,
+      color: pinColor,
+      size: 40,
+      shadows: [
+        Shadow(
+          color: Colors.black.withOpacity(0.3),
+          blurRadius: 3,
+          offset: const Offset(0, 2),
+        ),
+      ],
+    );
+  }
 
   List<Marker> _buildMapMarkers(List<Waypoint> waypoints) {
+    int waypointCounter = 1;
     return waypoints.map((waypoint) {
-      final isStart = waypoint.type == 'start';
-      final isDestination = waypoint.type == 'destination';
+      int currentNumber = waypointCounter;
+
+      // Only increment counter for subdestinations (not start or destination)
+      if (waypoint.type != 'start' && waypoint.type != 'destination') {
+        waypointCounter++;
+      }
 
       return Marker(
         point: LatLng(waypoint.latitude, waypoint.longitude),
-        child: Container(
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: isStart
-                ? Colors.black
-                : isDestination
-                ? Colors.red
-                : Colors.blue,
-          ),
-          width: 16,
-          height: 16,
-          child: Center(
-            child: Container(
-              width: 8,
-              height: 8,
-              decoration: const BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.white,
-              ),
-            ),
-          ),
-        ),
+        width: 40,
+        height: 50,
+        alignment: Alignment.center,
+        child: _buildPinMarker(waypoint.type, currentNumber),
       );
     }).toList();
+  }
+
+  List<Polyline> _buildPolylines() {
+    // If routePath is available, use it
+    if (routePath != null) {
+      final coordinates = routePath!['coordinates'] as List<dynamic>?;
+      if (coordinates != null && coordinates.isNotEmpty) {
+        final points = coordinates
+            .whereType<List<dynamic>>()
+            .where((coord) => coord.length >= 2)
+            .map(
+              (coord) => LatLng(
+                (coord[1] as num).toDouble(),
+                (coord[0] as num).toDouble(),
+              ),
+            )
+            .toList();
+
+        if (points.isNotEmpty) {
+          return [
+            Polyline(
+              points: points,
+              strokeWidth: 8,
+              color: Colors.blue.withOpacity(0.6),
+            ),
+          ];
+        }
+      }
+    }
+
+    // Fallback to connecting waypoints
+    return [
+      Polyline(
+        points: waypoints.map((w) => LatLng(w.latitude, w.longitude)).toList(),
+        strokeWidth: 8,
+        color: Colors.blue.withOpacity(0.6),
+      ),
+    ];
   }
 
   @override
@@ -54,7 +111,7 @@ class RideMapWidget extends StatelessWidget {
                   waypoints[0].latitude,
                   waypoints[0].longitude,
                 ),
-                initialZoom: 13,
+                initialZoom: initialZoom,
                 interactionOptions: const InteractionOptions(
                   flags: InteractiveFlag.all,
                 ),
@@ -65,17 +122,7 @@ class RideMapWidget extends StatelessWidget {
                   userAgentPackageName: 'com.crewride.crewride_app',
                 ),
                 MarkerLayer(markers: _buildMapMarkers(waypoints)),
-                PolylineLayer(
-                  polylines: [
-                    Polyline(
-                      points: waypoints
-                          .map((w) => LatLng(w.latitude, w.longitude))
-                          .toList(),
-                      strokeWidth: 3,
-                      color: Colors.blue.withOpacity(0.6),
-                    ),
-                  ],
-                ),
+                PolylineLayer(polylines: _buildPolylines()),
               ],
             )
           : Stack(
